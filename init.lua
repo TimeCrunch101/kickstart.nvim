@@ -195,6 +195,8 @@ vim.keymap.set('v', '<A-k>', ":m '<-2<CR>gv=gv")
 vim.keymap.set('v', '<A-j>', ":m '>+1<CR>gv=gv")
 vim.keymap.set('n', '<A-k>', ':m .-2<CR>==')
 vim.keymap.set('n', '<A-j>', ':m .+1<CR>==')
+vim.keymap.set('n', '<leader>vs', ':vsplit<CR>', { desc = '[V]ertical [S]plit' })
+vim.keymap.set('n', '<leader>hs', ':split<CR>', { desc = '[H]orizontal [S]plit' })
 vim.keymap.set('n', '<leader>pv', function()
   vim.cmd 'Ex'
 end)
@@ -468,6 +470,22 @@ require('lazy').setup({
       },
     },
   },
+
+  {
+    'nvim-tree/nvim-tree.lua',
+    dependencies = {
+      'nvim-tree/nvim-web-devicons', -- optional, for file icons
+    },
+    config = function()
+      require('nvim-tree').setup {
+        view = {
+          side = 'left',
+        },
+      }
+      vim.keymap.set('n', '<leader>e', ':NvimTreeToggle<CR>', { desc = 'Toggle File [E]xplorer' })
+    end,
+  },
+
   { 'Bilal2453/luvit-meta', lazy = true },
   {
     -- Main LSP Configuration
