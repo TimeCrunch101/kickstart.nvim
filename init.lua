@@ -478,6 +478,10 @@ require('lazy').setup({
     },
     config = function()
       require('nvim-tree').setup {
+        filters = {
+          dotfiles = false,
+          custom = {},
+        },
         view = {
           side = 'left',
         },
