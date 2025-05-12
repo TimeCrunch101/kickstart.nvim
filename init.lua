@@ -146,6 +146,11 @@ vim.opt.splitbelow = true
 -- Sets how neovim will display certain whitespace characters in the editor.
 --  See `:help 'list'`
 --  and `:help 'listchars'`
+--
+--  Notice listchars is set using `vim.optpt` instead of `vim.opt`.
+--  It is very similar to `vim.opt` but offers an interface for conveniently interacting with tables.
+--   See `:help lua-options`
+--   and `:help lua-options-guide`
 vim.opt.list = true
 vim.opt.listchars = { tab = '» ', trail = '·', nbsp = '␣' }
 
@@ -249,6 +254,7 @@ vim.opt.rtp:prepend(lazypath)
 -- NOTE: Here is where you install your plugins.
 require('lazy').setup({
   -- NOTE: Plugins can be added with a link (or for a github repo: 'owner/repo' link).
+  'NMAC427/guess-indent.nvim', -- Detect tabstop and shiftwidth automatically
   'tpope/vim-sleuth', -- Detect tabstop and shiftwidth automatically
   'windwp/nvim-autopairs',
   -- NOTE: Plugins can also be added by using a table,
@@ -444,11 +450,6 @@ require('lazy').setup({
       vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
       vim.keymap.set('n', '<leader><leader>', builtin.buffers, { desc = '[ ] Find existing buffers' })
 
-      vim.keymap.set('n', '<leader>b', function()
-        -- First clean and rebuild
-        vim.cmd '!make clean && make'
-      end, { desc = 'Clean, build, and run rsa.exe' })
-
       -- Slightly advanced example of overriding default behavior and theme
       vim.keymap.set('n', '<leader>/', function()
         -- You can pass additional configuration to Telescope to change the theme, layout, etc.
@@ -505,7 +506,6 @@ require('lazy').setup({
       vim.keymap.set('n', '<leader>e', ':NvimTreeToggle<CR>', { desc = 'Toggle File [E]xplorer' })
     end,
   },
-
   { 'Bilal2453/luvit-meta', lazy = true },
   {
     -- Main LSP Configuration
@@ -687,67 +687,49 @@ require('lazy').setup({
         },
       }
 
+      -- LSP servers and clients are able to communicate to each other what features they support.
+      --  By default, Neovim doesn't support everything that is in the LSP specification.
+      --  When you add blink.cmp, luasnip, etc. Neovim now has *more* capabilities.
+      --  So, we create new capabilities with blink.cmp, and then broadcast that to the servers.
       local capabilities = require('blink.cmp').get_lsp_capabilities()
-      local npm_root = vim.fn.trim(vim.fn.system('npm root -g'))
 
-      local tsls_cfg = {
-        init_options = {
-          plugins = {
-            {
-              name      = '@vue/typescript-plugin',
-              location  = vim.fn.trim(vim.fn.system('npm root -g')) .. '/@vue/typescript-plugin',
-              languages = { 'vue' },
-            },
-          },
-        },
-        filetypes = {
-          'javascript','javascriptreact',
-          'typescript','typescriptreact',
-          'vue',
-        },
-        single_file_support = false,
-      }
-
-
-
-      require('mason-tool-installer').setup {
-        ensure_installed = {
-          'vue-language-server',          -- Volar
-          'typescript-language-server',   -- tsserver
-          'stylua',
-        },
-      }
-
-      
+      -- Enable the following language servers
+      --  Feel free to add/remove any LSPs that you want here. They will automatically be installed.
+      --
+      --  Add any additional override configuration in the following tables. Available keys are:
+      --  - cmd (table): Override the default command used to start the server
+      --  - filetypes (table): Override the default list of associated filetypes for the server
+      --  - capabilities (table): Override fields in capabilities. Can be used to disable certain LSP features.
+      --  - settings (table): Override the default settings passed when initializing the server.
+      --        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
       local servers = {
-        ts_ls = {                                        -- ← new name
-        init_options = {
-          plugins = {                                  -- hook Volar’s TS plugin
-            {
-              name      = '@vue/typescript-plugin',
-              location  = npm_root .. '/@vue/typescript-plugin',
-              languages = { 'vue' },
+        -- clangd = {},
+        gopls = {},
+        -- pyright = {},
+        -- rust_analyzer = {},
+        -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
+        --
+        -- Some languages (like typescript) have entire language plugins that can be useful:
+        --    https://github.com/pmizio/typescript-tools.nvim
+        --
+        -- But for many setups, the LSP (`ts_ls`) will work just fine
+        -- ts_ls = {},
+        --
+
+        lua_ls = {
+          -- cmd = { ... },
+          -- filetypes = { ... },
+          -- capabilities = {},
+          settings = {
+            Lua = {
+              completion = {
+                callSnippet = 'Replace',
+              },
+              -- You can toggle below to ignore Lua_LS's noisy `missing-fields` warnings
+              -- diagnostics = { disable = { 'missing-fields' } },
             },
           },
         },
-        filetypes = {                                  -- let ts_ls attach to .vue
-          'javascript', 'javascriptreact',
-          'typescript', 'typescriptreact', 'vue',
-        },
-        single_file_support = false,
-      },
-
-      volar = { filetypes = { 'vue' } },
-
-      lua_ls = {
-        settings = {
-          Lua = {
-            completion = {
-              callSnippet = 'Replace',
-            },
-          },
-        },
-      },
       }
 
       -- Ensure the servers and tools above are installed
@@ -765,61 +747,24 @@ require('lazy').setup({
       -- for you, so that they are available from within Neovim.
       local ensure_installed = vim.tbl_keys(servers or {})
       vim.list_extend(ensure_installed, {
-        'vue-language-server',          -- Volar
-        'typescript-language-server',   -- tsserver
         'stylua', -- Used to format Lua code
       })
-      require('mason-tool-installer').setup {
-        ensure_installed = {
-          'vue-language-server',          -- Volar
-          'typescript-language-server',   -- ts_ls backend
-          'stylua',
+      require('mason-tool-installer').setup { ensure_installed = ensure_installed }
+
+      require('mason-lspconfig').setup {
+        ensure_installed = {}, -- explicitly set to an empty table (Kickstart populates installs via mason-tool-installer)
+        automatic_installation = false,
+        handlers = {
+          function(server_name)
+            local server = servers[server_name] or {}
+            -- This handles overriding only values explicitly passed
+            -- by the server configuration above. Useful when disabling
+            -- certain features of an LSP (for example, turning off formatting for ts_ls)
+            server.capabilities = vim.tbl_deep_extend('force', {}, capabilities, server.capabilities or {})
+            require('lspconfig')[server_name].setup(server)
+          end,
         },
-        auto_update = true,
       }
-
-    --   require('mason-lspconfig').setup {
-    --     automatic_installation = false,
-    --     automatic_enable       = true,
-    --     handlers = {
-    --       function(name)
-    --         local cfg      = servers[name] or {}
-    --         cfg.capabilities = vim.tbl_deep_extend('force', {}, capabilities, cfg.capabilities or {})
-    --         require('lspconfig')[name].setup(cfg)
-    --       end,
-    --     },
-    --   }
-    -- end,
-    require('mason-lspconfig').setup {
-      automatic_installation = false,
-      automatic_enable       = true,
-      handlers = {
-        function(name)
-          local cfg = {}                              -- defaults
-          if name == 'ts_ls' then
-            cfg = tsls_cfg                            -- override for ts_ls only
-          elseif name == 'volar' then
-            cfg.filetypes = { 'vue' }                 -- keep volar on .vue only
-          end
-          require('lspconfig')[name].setup(cfg)
-        end,
-      },
-    }
-
-    -- place this **after** require('mason-lspconfig').setup(...)
-    require('lspconfig').ts_ls.setup {
-      init_options = {
-        plugins = {
-          {
-            name      = '@vue/typescript-plugin',
-            location  = vim.fn.trim(vim.fn.system('npm root -g')) .. '/@vue/typescript-plugin',
-            languages = { 'vue' },
-          },
-        },
-      },
-      filetypes = { 'javascript','javascriptreact','typescript','typescriptreact','vue' },
-      single_file_support = false,
-    }
     end,
   },
 
@@ -962,7 +907,12 @@ require('lazy').setup({
       signature = { enabled = true },
     },
   },
-  {
+
+  { -- You can easily change to a different colorscheme.
+    -- Change the name of the colorscheme plugin below, and then
+    -- change the command in the config to whatever the name of that colorscheme is.
+    --
+    -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
     'folke/tokyonight.nvim',
     priority = 1000, -- Make sure to load this before all the other start plugins.
     config = function()
